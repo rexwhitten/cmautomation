@@ -8,6 +8,7 @@ RUN apt-get update && \
     python3-pip \
     curl \
     git \
+    jq \
     python3-setuptools \
     python3-wheel \
     && rm -rf /var/lib/apt/lists/*
