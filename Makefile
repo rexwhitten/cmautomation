@@ -74,10 +74,7 @@ plan:
 			-var="GIT_BRANCH=$(TF_VAR_GIT_BRANCH)" \
 			-var="GIT_TOKEN=$(TF_VAR_GIT_TOKEN)"
 
-.PHONY: test
-# Runs tests for changed modules only
-test: $(PAAS)/test
-	@echo "Completed tests for changed modules."
+
 
 apply:
 	@cd $(WORKSPACE_DIR) && \

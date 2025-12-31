@@ -55,6 +55,18 @@ resource "aws_iam_policy" "lambda_custom_policy" {
           "secretsmanager:PutSecretValue"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = aws_dynamodb_table.mna_context.arn
       }
     ]
   })

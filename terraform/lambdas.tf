@@ -43,6 +43,7 @@ resource "aws_lambda_function" "functions" {
       DB_NAME         = aws_rds_cluster.aurora.database_name
       DB_USER         = var.db_username
       DB_PASSWORD     = random_password.db_password.result
+      MNA_CONTEXT_TABLE = aws_dynamodb_table.mna_context.name
     }
   }
 
