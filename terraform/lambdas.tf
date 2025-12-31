@@ -14,20 +14,25 @@ locals {
   }
 }
 
+data "aws_ecr_image" "image" {
+  repository_name = "my/service"
+  image_tag       = "latest"
+}
+
 resource "aws_lambda_function" "functions" {
   for_each = local.functions
 
   function_name = "${var.project_name}-${each.key}"
   role          = aws_iam_role.lambda_role.arn
   package_type  = "Image"
-  image_uri     = local.lambda_image_uri
+  image_uri     = data.aws_ecr_image.image.image_uri
 
   image_config {
     command = [each.value]
   }
 
   vpc_config {
-    subnet_ids         = module.vpc.private_subnets
+    subnet_ids         = var.vpc_private_subnets
     security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
@@ -37,7 +42,7 @@ resource "aws_lambda_function" "functions" {
       DB_HOST         = aws_rds_cluster.aurora.endpoint
       DB_NAME         = aws_rds_cluster.aurora.database_name
       DB_USER         = var.db_username
-      DB_PASSWORD     = var.db_password
+      DB_PASSWORD     = random_password.db_password.result
     }
   }
 

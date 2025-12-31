@@ -26,30 +26,29 @@ build:
 	pip install -r requirements.txt
 
 # Build the Docker image
-
 docker-build:
 	docker build -t $(IMAGE_NAME) .
 
 # Push the Docker image to ECR
-
 docker-push:
-			 @echo "Ensuring ECR repository exists..."
-			 set -a; [ -f $(CURDIR)/.env ] && . $(CURDIR)/.env; set +a; \
-			 REPO_NAME=$$(echo $(ECR_REPO) | rev | cut -d'/' -f1 | rev); \
-			 if command -v aws >/dev/null 2>&1; then \
-				 aws ecr describe-repositories --repository-names $$REPO_NAME --region $(ECR_REGION) > /dev/null 2>&1 || aws ecr create-repository --repository-name $$REPO_NAME --region $(ECR_REGION); \
-				 aws ecr get-login-password --region $(ECR_REGION) | docker login --username AWS --password-stdin $$(echo $(ECR_REPO) | cut -d'/' -f1); \
-			 else \
-				 docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr describe-repositories --repository-names $$REPO_NAME --region $(ECR_REGION) > /dev/null 2>&1 || \
-				 docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr create-repository --repository-name $$REPO_NAME --region $(ECR_REGION); \
-				 docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr get-login-password --region $(ECR_REGION) | docker login --username AWS --password-stdin $$(echo $(ECR_REPO) | cut -d'/' -f1); \
-			 fi
-			 docker push $(IMAGE_NAME)
+	@echo "Ensuring ECR repository exists..."
+	set -a; [ -f $(CURDIR)/.env ] && . $(CURDIR)/.env; set +a; \
+	REPO_NAME=$$(echo $(ECR_REPO) | rev | cut -d'/' -f1 | rev); \
+	if command -v aws >/dev/null 2>&1; then \
+		aws ecr describe-repositories --repository-names $$REPO_NAME --region $(ECR_REGION) > /dev/null 2>&1 || aws ecr create-repository --repository-name $$REPO_NAME --region $(ECR_REGION); \
+		aws ecr get-login-password --region $(ECR_REGION) | docker login --username AWS --password-stdin $$(echo $(ECR_REPO) | cut -d'/' -f1); \
+	else \
+		docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr describe-repositories --repository-names $$REPO_NAME --region $(ECR_REGION) > /dev/null 2>&1 || \
+		docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr create-repository --repository-name $$REPO_NAME --region $(ECR_REGION); \
+		docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr get-login-password --region $(ECR_REGION) | docker login --username AWS --password-stdin $$(echo $(ECR_REPO) | cut -d'/' -f1); \
+	fi
+	docker push $(IMAGE_NAME)
 
+# Clean up Python cache files
 clean:
 	rm -rf __pycache__ .pytest_cache
 
-#
+# Terraform targets
 init:
 	@echo "Initializing Terraform in $(WORKSPACE_DIR) for environment $(SDLC_ENV)"
 	@cd $(WORKSPACE_DIR) && \

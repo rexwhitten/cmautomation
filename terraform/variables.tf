@@ -28,13 +28,6 @@ variable "db_username" {
   default     = "postgres"
 }
 
-variable "db_password" {
-  description = "Database Master Password"
-  type        = string
-  sensitive   = true
-  default     = "ChangeMe123!" # In production, use Secrets Manager
-}
-
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
   type        = string
@@ -57,4 +50,9 @@ variable "vpc_public_subnets" {
   description = "Public subnets for the VPC"
   type        = list(string)
   default     = ["10.0.101.0/24", "10.0.102.0/24"]
+}
+
+variable "vpc_id" {
+  description = "ID of the VPC"
+  type        = string
 }

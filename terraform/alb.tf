@@ -3,7 +3,7 @@ resource "aws_lb" "alb" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = module.vpc.public_subnets
+  subnets            = var.vpc_public_subnets
 
   tags = {
     Project = var.project_name
@@ -13,7 +13,7 @@ resource "aws_lb" "alb" {
 resource "aws_security_group" "alb_sg" {
   name        = "${var.project_name}-alb-sg"
   description = "Security group for ALB"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = var.vpc_id
 
   ingress {
     from_port   = 80
@@ -29,18 +29,13 @@ resource "aws_security_group" "alb_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Project = var.project_name
-  }
+  tags = local.tags
 }
 
 resource "aws_lb_target_group" "frontend_tg" {
   name        = "${var.project_name}-frontend-tg"
   target_type = "lambda"
-
-  tags = {
-    Project = var.project_name
-  }
+  tags = local.tags
 }
 
 resource "aws_lb_target_group_attachment" "frontend_attachment" {
@@ -69,5 +64,6 @@ resource "aws_lambda_permission" "alb" {
 }
 
 output "alb_dns_name" {
-  value = aws_lb.alb.dns_name
+    description = "DNS name of the Application Load Balancer"
+    value = aws_lb.alb.dns_name
 }
