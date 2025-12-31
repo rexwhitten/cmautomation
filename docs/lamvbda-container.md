@@ -1,157 +1,135 @@
-# Spike Outcome: Single-Container Architecture for M&A Security Platform
+### Spike Artifact: Architectural Decision - Packaging Strategy
 
 ---
 
-## 1. Executive Summary
+### 1. The Decision
 
-This spike investigated the feasibility and operational impact of packaging multiple Lambda functions (Scorer, Remediator, Onboarding) into a **single container image**.
+We will package our entire application (Scorer, Remediator, Onboarding) as a **single Container Image** and deploy it to AWS Lambda.
 
-**Conclusion:** We recommend adopting the **"One Image, Many Handlers"** pattern. This approach significantly simplifies our CI/CD pipeline and ensures code consistency across functions without introducing meaningful performance penalties for our specific low-concurrency use case.
+### 2. The Rationale (The "Why")
 
-## 2. The Problem
+While Lambda Layers are popular for sharing small Python libraries (like `requests`), they break down at the scale and complexity of our platform.
 
-> This documentation only references two functions but the final solution will include many functions.
+#### A. The "OPA Binary" Problem
 
-Our platform consists of distinct logical components (Scoring, Remediation, Onboarding) that share significant underlying logic (data models, utility libraries, and configuration parsing).
+Our platform relies on the Open Policy Agent (OPA) binary (`opa_linux_amd64`) to execute policy.
 
-Maintaining separate Dockerfiles and build pipelines for each function results in:
+- **With Layers:** You must manually download the binary, zip it into a specific structure (`/bin/opa`), upload it as a layer, and ensure every function mounts it to `/opt/bin`. Local testing requires manually mocking this `/opt` path.
 
-- **Duplicate Logic:** Shared code must be copied or packaged into complex layers.
-- **Slow CI/CD:** Building and pushing 3-4 distinct images per commit increases build time and storage costs.
-- **Drift:** Risk of "Scorer" using a different version of the utility library than "Remediator."
+- **With Containers:** You add **one line** to your Dockerfile:
+  `ADD https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static /usr/local/bin/opa`
+  It works in production. It works on your laptop. It works in CI.
 
-## 3. The Solution: "Monolithic Image, Dynamic Entrypoints"
+#### B. The "Shared Code" Problem
 
-Instead of building `scorer:latest`, `remediator:latest`, etc., we build a single `ma-platform:latest` image.
+Our functions share significant logic (`common/dynamo.py`, `common/logger.py`).
 
-When deploying the AWS Lambda resources, we configure each function to use the **same image URI** but override the **Command (CMD)** parameter to point to the specific handler method required for that role.
+- **With Layers:** Sharing code requires building a complex CI/CD pipeline that zips the `common/` folder, publishes it as a Layer Version, and updates the Lambda functions to point to the new Layer ARN. This introduces "Dependency Drift" (e.g., Scorer is on v2 of the Layer, Remediator is on v1).
 
-### 3.1. Technical Implementation
+- **With Containers:** We copy the code once during the build: `COPY common/ ./common/`. Every function is guaranteed to run the exact same version of the shared utilities.
 
-#### A. The File Structure
+#### C. Local Development Experience
 
-All source code resides in a single directory structure within the container.
+- **With Layers:** Developers must install `sam-cli` or manually unzip layers to `/opt` to simulate the environment.
+- **With Containers:** `docker run -p 9000:8080 my-image`. If it runs in Docker, it runs in Lambda.
 
-```text
-/var/task/
-├── common/             # Shared libraries (Logging, DynamoDB wrappers)
-├── policy/             # OPA/Rego policies (Shared by all)
-├── src/
-│   ├── scorer.py       # Handler for Scoring Logic
-│   ├── remediator.py   # Handler for Remediation Logic
-│   └── onboarding.py   # Handler for API Gateway/Onboarding
-└── Dockerfile          # Single definition for the entire platform
+---
 
-```
+### 3. Comparison Matrix
 
-#### B. The Dockerfile
+| Feature              | **Container Image (Selected)**                                 | **Zip + Layers (Rejected)**                                             |
+| -------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| **Dependency Limit** | **10 GB** (Plenty for OPA + Python + WASM)                     | **250 MB** (Hard limit for Unzipped code + Layers)                      |
+| **Shared Code**      | **Atomic.** Code is copied at build time. No version mismatch. | **Fragmented.** Layers are versioned independently. High risk of drift. |
+| **Binary Binaries**  | **Native.** `ADD /usr/bin/tool`.                               | **Hack.** Must place in specific zip paths and mess with `$PATH`.       |
+| **Local Testing**    | **Standard.** `docker run`.                                    | **Complex.** Requires SAM CLI or mocking.                               |
+| **Build Tooling**    | **Simple.** Standard Dockerfile.                               | **Complex.** Custom scripts to zip folders and publish Layer Versions.  |
 
-We install all dependencies for _all_ functions in one pass. The `CMD` instruction in the Dockerfile serves only as a default; it will be overridden by Terraform.
+---
+
+### 4. Implementation Details
+
+#### A. The "Monolithic" Dockerfile
+
+This single file builds the entire platform. Notice we install dependencies _once_ for all functions.
 
 ```dockerfile
+# Use the AWS Lambda Python Base Image
 FROM public.ecr.aws/lambda/python:3.10
 
-# 1. Install Global Dependencies (OPA, AWS SDK, etc.)
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-# 2. Install OPA Binary (Used by Scorer)
+# 1. INSTALL SYSTEM DEPENDENCIES (The OPA Binary)
+# This is where Layers struggle. In Docker, it's one line.
 ADD https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static /usr/local/bin/opa
 RUN chmod 755 /usr/local/bin/opa
 
-# 3. Copy ALL source code
+# 2. INSTALL PYTHON DEPENDENCIES
+# We copy strict requirements first to leverage Docker Layer Caching
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# 3. COPY SOURCE CODE (The Monolith)
+# We copy everything. The handler decides what runs.
 COPY common/ ./common/
-COPY policy/ ./policy/
 COPY src/ ./src/
 
-# 4. Default Command (Optional, serves as a fallback)
+# 4. DEFAULT CMD (Can be overridden)
 CMD [ "src.onboarding.lambda_handler" ]
 
 ```
 
-#### C. The Terraform Configuration (The Magic)
+#### B. The Terraform (One Image, Many Handlers)
 
-We reuse the same image URI but change the `image_config` block for each function resource.
+We push **one image** to ECR. We deploy **three functions** pointing to that same image, but we override the `command` (Handler) for each.
 
 ```hcl
-# The Shared Image Repository
-resource "aws_ecr_repository" "platform_repo" {
+# 1. The Shared Image Repository
+data "aws_ecr_repository" "monolith" {
   name = "ma-platform-monolith"
 }
 
-# Function 1: Scorer
+# --- FUNCTION 1: SCORER ---
 resource "aws_lambda_function" "scorer" {
   function_name = "ma-scorer"
+  role          = aws_iam_role.scorer_role.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.platform_repo.repository_url}:latest"
+  image_uri     = "${data.aws_ecr_repository.monolith.repository_url}:latest"
 
-  # OVERRIDE: Point to the Scorer logic
+  # OVERRIDE: This function behaves as the Scorer
   image_config {
     command = ["src.scorer.lambda_handler"]
   }
 }
 
-# Function 2: Remediator
+# --- FUNCTION 2: REMEDIATOR ---
 resource "aws_lambda_function" "remediator" {
   function_name = "ma-remediator"
+  role          = aws_iam_role.remediator_role.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.platform_repo.repository_url}:latest"
+  image_uri     = "${data.aws_ecr_repository.monolith.repository_url}:latest"
 
-  # OVERRIDE: Point to the Remediator logic
+  # OVERRIDE: This function behaves as the Remediator
   image_config {
     command = ["src.remediator.lambda_handler"]
   }
 }
 
-```
+# --- FUNCTION 3: ONBOARDING ---
+resource "aws_lambda_function" "onboarding" {
+  function_name = "ma-onboarding"
+  role          = aws_iam_role.onboarding_role.arn
+  package_type  = "Image"
+  image_uri     = "${data.aws_ecr_repository.monolith.repository_url}:latest"
 
-## 4. Pros & Cons Analysis
-
-### Advantages (Why we are doing this)
-
-1. **Atomic Deployments:** A single `docker push` updates the entire platform. There is zero risk that the "Scorer" is running v1.0 code while the "Remediator" is running v1.1.
-2. **Simplified CI/CD:** Our GitHub Actions workflow builds **one** container. This cuts CI time by ~60% compared to building 3 separate images.
-3. **Shared Cache:** Since all functions run on the same base image with the same Python requirements, Docker layer caching is maximized.
-4. **Local Development:** Developers only need to spin up one container to test any function locally.
-
-### Risks & Mitigations (What we must watch)
-
-1. **Image Size:** Including dependencies for _all_ functions increases the total image size.
-
-- _Mitigation:_ Our dependencies (Boto3, Requests, OPA) are lightweight. Total image size remains under 500MB, well within Lambda limits.
-
-2. **Least Privilege Violation:** The code for "Remediation" exists inside the "Scorer" container, even if not executed.
-
-- _Mitigation:_ Security is enforced at the **IAM Role** level, not the container level. The `ma-scorer` Lambda function will still have a restricted IAM role that cannot access the Remediation queues, regardless of what code sits on the disk.
-
-3. **Cold Starts:** Larger images _can_ incur slightly longer initialization times.
-
-- _Mitigation:_ AWS "Lazy Loading" for container images minimizes this impact. For an asynchronous M&A scoring process, an extra 500ms of cold start is irrelevant.
-
-## 5. Deployment Strategy
-
-To operationalize this, our `Makefile` will change from iterating over directories to a single build command:
-
-**Old Way:**
-
-```bash
-docker build -t scorer src/scorer
-docker build -t remediator src/remediator
-# ... repeat for N functions
+  # OVERRIDE: This function behaves as the Onboarding API
+  image_config {
+    command = ["src.onboarding.lambda_handler"]
+  }
+}
 
 ```
 
-**New Way (Recommended):**
+### 5. Final Verdict
 
-```bash
-docker build -t ma-platform .
-docker push ma-platform
-aws lambda update-function-code --function-name ma-scorer ...
-aws lambda update-function-code --function-name ma-remediator ...
+Using Layers would force us to build a complex "Layer Management" pipeline to handle the OPA binary and shared Python code.
 
-```
-
-## 6. Verdict
-
-**Proceed with the Monolithic Container approach.**
-The operational simplicity far outweighs the theoretical purity of separate containers for this specific application. It aligns perfectly with our goal of "Ruthless Automation" by reducing the moving parts in our deployment pipeline.
+By using **Containerized Lambda**, we collapse the build process into a single `docker build` command. The slight increase in image size (storage) is negligible compared to the massive reduction in operational complexity.
