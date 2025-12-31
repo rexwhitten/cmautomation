@@ -61,10 +61,11 @@ def create_onboarding(event_body):
 
         item = {
             "onboardingId": onboarding_id,
+            "userId": event_body.get("userId", ""),
             "createdAt": timestamp,
             "updatedAt": timestamp,
             "currentStep": 1,
-            "status": "in_progress",
+            "status": "draft",
             "companyName": event_body.get("companyName", ""),
             "contactName": event_body.get("contactName", ""),
             "contactEmail": event_body.get("contactEmail", ""),
