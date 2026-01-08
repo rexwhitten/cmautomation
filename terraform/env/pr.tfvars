@@ -1,1 +1,2 @@
-vpc_id=<VPC_ID> # or ssm lookup
+project_name="cmmxna"
+environment="pr"

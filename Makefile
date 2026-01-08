@@ -11,7 +11,7 @@ SDLC_ENV ?= pr
 ECR_REGION ?= us-east-1
 AWS_ACCOUNT_ID ?= 704855531002
 ECR_REPO ?= $(AWS_ACCOUNT_ID).dkr.ecr.$(ECR_REGION).amazonaws.com/cmmx
-IMAGE_TAG ?= latest
+IMAGE_TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "latest")
 IMAGE_NAME ?= $(ECR_REPO):$(IMAGE_TAG)
 
 # terraform 
@@ -29,8 +29,8 @@ build:
 docker-build:
 	docker build -t $(IMAGE_NAME) .
 
-# Push the Docker image to ECR
-docker-push:
+# Push the Docker image to ECR and publish the ARN to an AWS SSM Parameter
+docker-push: docker-build
 	@echo "Ensuring ECR repository exists..."
 	set -a; [ -f $(CURDIR)/.env ] && . $(CURDIR)/.env; set +a; \
 	REPO_NAME=$$(echo $(ECR_REPO) | rev | cut -d'/' -f1 | rev); \
@@ -43,6 +43,18 @@ docker-push:
 		docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ecr get-login-password --region $(ECR_REGION) | docker login --username AWS --password-stdin $$(echo $(ECR_REPO) | cut -d'/' -f1); \
 	fi
 	docker push $(IMAGE_NAME)
+	@echo "Publishing Image URI to SSM..."
+	set -a; [ -f $(CURDIR)/.env ] && . $(CURDIR)/.env; set +a; \
+	REPO_NAME=$$(echo $(ECR_REPO) | rev | cut -d'/' -f1 | rev); \
+	if command -v aws >/dev/null 2>&1; then \
+		aws ssm put-parameter --name "/app/$$REPO_NAME/image_uri" --value "$(IMAGE_NAME)" --type String --overwrite --region $(ECR_REGION); \
+	else \
+		docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ssm put-parameter --name "/app/$$REPO_NAME/image_uri" --value "$(IMAGE_NAME)" --type String --overwrite --region $(ECR_REGION); \
+	fi
+	
+
+
+
 
 # Clean up Python cache files
 clean:
@@ -85,3 +97,13 @@ apply:
 			-var="GIT_HTTPS_REPO=$(TF_VAR_GIT_HTTPS_REPO)"  \
 			-var="GIT_BRANCH=$(TF_VAR_GIT_BRANCH)" \
 			-var="GIT_TOKEN=$(TF_VAR_GIT_TOKEN)"
+
+
+tf/test:
+	@cd $(WORKSPACE_DIR) && \
+		terraform test \
+			-var="SDLC_ENV=sandbox" \
+			-var="GIT_REPO=$(TF_VAR_GIT_REPO)"  \
+			-var="GIT_HTTPS_REPO=$(TF_VAR_GIT_HTTPS_REPO)"  \
+			-var="GIT_BRANCH=$(TF_VAR_GIT_BRANCH)" \
+			-var="GIT_TOKEN=$(TF_VAR_GIT_TOKEN)";

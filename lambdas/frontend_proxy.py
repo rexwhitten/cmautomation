@@ -8,7 +8,7 @@ S3_INDEX_FILE = "index.html"
 s3 = boto3.client("s3")
 
 
-def lambda_handler(event, context):
+def frontend_logic(event, context):
     """
     Lambda function to serve static frontend files from S3 for SPA routing.
     If the requested file is not found, returns index.html for SPA support.

@@ -6,7 +6,14 @@
   "redhat.telemetry.enabled": false,
   "yaml.customTags": ["!Ref", "!GetAtt", "!Sub", "!Base64"],
   "python.analysis.typeCheckingMode": "basic",
-
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "terraform/.terraform": true
+  },
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
@@ -25,5 +32,18 @@
 
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "[terraform]": {
+    "editor.defaultFormatter": "hashicorp.terraform",
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveMode": "file"
+  },
+  "[terraform-vars]": {
+    "editor.defaultFormatter": "hashicorp.terraform",
+    "editor.formatOnSave": true
+  },
+  "[terraform-test]": {
+    "editor.defaultFormatter": "hashicorp.terraform",
+    "editor.formatOnSave": true
   }
 }

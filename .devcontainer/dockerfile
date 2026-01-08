@@ -9,6 +9,7 @@ RUN apt-get update && \
     curl \
     git \
     jq \
+    unzip \
     python3-setuptools \
     python3-wheel \
     && rm -rf /var/lib/apt/lists/*

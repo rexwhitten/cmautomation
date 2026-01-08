@@ -1,5 +1,5 @@
 resource "aws_iam_role" "lambda_role" {
-  name = "${var.project_name}-lambda-role"
+  name = "${var.project_name}-${var.environment}-lambda-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -14,9 +14,7 @@ resource "aws_iam_role" "lambda_role" {
     ]
   })
 
-  tags = {
-    Project = var.project_name
-  }
+  tags = local.tags
 }
 
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
@@ -30,7 +28,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
 }
 
 resource "aws_iam_policy" "lambda_custom_policy" {
-  name        = "${var.project_name}-lambda-custom-policy"
+  name        = "${var.project_name}-${var.environment}-lambda-custom-policy"
   description = "Custom permissions for S3 and Secrets Manager"
 
   policy = jsonencode({
@@ -66,7 +64,10 @@ resource "aws_iam_policy" "lambda_custom_policy" {
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
-        Resource = aws_dynamodb_table.mna_context.arn
+        Resource = [  
+          aws_dynamodb_table.context.arn,
+          aws_dynamodb_table.assessments.arn
+        ]
       }
     ]
   })

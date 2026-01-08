@@ -6,6 +6,8 @@ from lambdas.import_katana import import_katana_logic
 from lambdas.import_coralogix import import_coralogix_logic
 from lambdas.remediation_planning import remediation_planning_logic
 from lambdas.reporting import reporting_logic
+from lambdas.scoring import scoring_logic
+from lambdas.frontend_proxy import frontend_logic
 
 
 def onboarding_handler(event, context):
@@ -38,3 +40,11 @@ def remediation_planning_handler(event, context):
 
 def reporting_handler(event, context):
     return reporting_logic(event, context)
+
+
+def scoring_handler(event, context):
+    return scoring_logic(event, context)
+
+
+def frontend_handler(event, context):
+    return frontend_logic(event, context)

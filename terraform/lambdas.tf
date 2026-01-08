@@ -1,6 +1,5 @@
 locals {
-  lambda_image_uri = "${aws_ecr_repository.repo.repository_url}:${var.image_tag}"
-  
+
   functions = {
     onboarding           = "handlers.onboarding_handler"
     import_aws           = "handlers.import_aws_handler"
@@ -10,46 +9,49 @@ locals {
     import_coralogix     = "handlers.import_coralogix_handler"
     remediation_planning = "handlers.remediation_planning_handler"
     reporting            = "handlers.reporting_handler"
-    frontend_proxy       = "handlers.frontend_proxy_handler" # Assuming you added this to handlers.py
+    scoring              = "handlers.scoring_handler"
+    frontend_proxy       = "handlers.frontend_handler"
   }
 }
 
-data "aws_ecr_image" "image" {
-  repository_name = "my/service"
-  image_tag       = "latest"
+resource "aws_security_group" "functions" {
+  name        = "${var.project_name}-${var.environment}-lambda-sg"
+  description = "Security group for Lambda functions"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 }
 
 resource "aws_lambda_function" "functions" {
-  for_each = local.functions
-
-  function_name = "${var.project_name}-${each.key}"
+  for_each      = local.functions
+  function_name = "${var.project_name}-${var.environment}-${each.key}"
   role          = aws_iam_role.lambda_role.arn
   package_type  = "Image"
-  image_uri     = data.aws_ecr_image.image.image_uri
+  image_uri     = data.aws_ssm_parameter.image_uri[0].value
 
   image_config {
     command = [each.value]
   }
 
   vpc_config {
-    subnet_ids         = var.vpc_private_subnets
-    security_group_ids = [aws_security_group.lambda_sg.id]
+    subnet_ids         = toset(aws_subnet.private[*].id)
+    security_group_ids = [aws_security_group.functions.id]
   }
 
   environment {
     variables = {
-      FRONTEND_BUCKET = aws_s3_bucket.frontend_bucket.id
-      DB_HOST         = aws_rds_cluster.aurora.endpoint
-      DB_NAME         = aws_rds_cluster.aurora.database_name
-      DB_USER         = var.db_username
-      DB_PASSWORD     = random_password.db_password.result
-      MNA_CONTEXT_TABLE = aws_dynamodb_table.mna_context.name
+      CCM_MNA_FRONTEND_BUCKET   = aws_s3_bucket.frontend_bucket.id
+      CCM_MNA_CONTEXT_TABLE     = aws_dynamodb_table.context.name
+      CCM_MNA_ASSESSMENT_TABLE  = aws_dynamodb_table.assessments.name
     }
   }
 
-  timeout = 60
-
-  tags = {
-    Project = var.project_name
-  }
+  # 15 minute timeout
+  timeout = 900
+  tags = local.tags
 }
