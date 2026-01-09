@@ -13,7 +13,7 @@ WORKSPACE_DIR="./terraform"
 TF_VAR_GIT_HTTPS_REPO=$(git config --get remote.origin.url | sed 's/ssh:\/\/git@/https:\/\//;s/git@/https:\/\//;s/:/\//')
 TF_VAR_GIT_REPO=$(git config --get remote.origin.url)
 TF_VAR_GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-TF_VAR_GIT_TOKEN="${GITHUB_TOKEN:-}"
+
 
 # AWS 
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-704855531002}"
@@ -90,19 +90,48 @@ docker_push(){
     fi
 }
 
+tftest(){
+	cd ${WORKSPACE_DIR} && \
+		terraform test \
+			-var="SDLC_ENV=sandbox" \
+			-var="GIT_REPO=${TF_VAR_GIT_REPO}"  \
+			-var="GIT_HTTPS_REPO=${TF_VAR_GIT_HTTPS_REPO}"  \
+			-var="GIT_BRANCH=${TF_VAR_GIT_BRANCH}";
+}
+
 clean(){
     rm -rf __pycache__ .pytest_cache
 }
 
 init(){
     echo "Initializing Terraform in ${WORKSPACE_DIR} for environment ${SDLC_ENV}"
-    cd {{WORKSPACE_DIR}} && \
+    cd ${WORKSPACE_DIR} && \
         rm -rf .terraform && \
         rm -rf .terraform.lock.hcl && \
         terraform init \
-            -backend-config="./env/{{SDLC_ENV}}.tfbackend" \
+            -backend-config="./env/${SDLC_ENV}.remote.tfbackend" \
             -reconfigure \
             -upgrade
+}
+
+plan(){
+    echo "Planning Terraform changes in ${WORKSPACE_DIR} for environment ${SDLC_ENV}"
+	cd ${WORKSPACE_DIR} && \
+		terraform plan \
+			-var-file="./${SDLC_ENV}.tfvars" \
+			-var="GIT_REPO=${TF_VAR_GIT_REPO}"  \
+			-var="GIT_HTTPS_REPO=${TF_VAR_GIT_HTTPS_REPO}"  \
+			-var="GIT_BRANCH=${TF_VAR_GIT_BRANCH}"
+}
+
+apply(){
+	cd ${WORKSPACE_DIR} && \
+		terraform apply \
+		    -auto-approve \
+			-var-file="./${SDLC_ENV}.tfvars" \
+			-var="GIT_REPO=${TF_VAR_GIT_REPO}"  \
+			-var="GIT_HTTPS_REPO=${TF_VAR_GIT_HTTPS_REPO}"  \
+			-var="GIT_BRANCH=${TF_VAR_GIT_BRANCH}"
 }
 
 default(){

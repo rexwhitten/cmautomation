@@ -1,6 +1,10 @@
 stages:
+  - unit-test
   - build
-  - deploy
+  - infra-plan
+  - infra-test
+  - infra-apply
+  - infra-verify
 
 variables:
   AWS_DEFAULT_REGION: us-east-1
@@ -9,5 +13,6 @@ variables:
   IMAGE_TAG: ${CI_COMMIT_SHA}
 
 include:
+  - local: '.gitlab/ci/unit-test.yml'
   - local: '.gitlab/ci/build.yml'
-  - local: '.gitlab/ci/deploy.yml'
+  - local: '.gitlab/ci/terraform.yml'

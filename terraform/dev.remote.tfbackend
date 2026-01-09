@@ -1,0 +1,9 @@
+terraform { 
+  cloud { 
+    organization = "whittenio" 
+
+    workspaces { 
+      name = "cmmxna" 
+    } 
+  } 
+}

@@ -41,12 +41,6 @@ variable "private_subnet_cidrs" {
 }
 
 # 4. GIT/Automation
-variable "GIT_TOKEN" {
-  description = "Personal Access Token for GitHub."
-  type        = string
-  sensitive   = true
-}
-
 variable "GIT_HTTPS_REPO" {
   description = "Git HTTPS repository containing the Terraform code."
   type        = string

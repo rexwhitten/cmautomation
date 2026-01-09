@@ -1,0 +1,48 @@
+variables:
+  TF_ROOT: ${CI_PROJECT_DIR}/terraform
+
+.terraform-base:
+  image: hashicorp/terraform:latest
+  before_script:
+    - cd ${TF_ROOT}
+    - terraform --version
+    - terraform init
+
+tf-plan:
+  extends: .terraform-base
+  stage: infra-plan
+  script:
+    - terraform plan -out=tfplan
+  artifacts:
+    paths:
+      - ${TF_ROOT}/tfplan
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^feature\/.*$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && ($CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev")
+    - if: $CI_COMMIT_BRANCH == "main"
+
+tf-test-integration:
+  extends: .terraform-base
+  stage: infra-test
+  script:
+    - terraform test
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^feature\/.*$/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && ($CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev")
+
+tf-apply:
+  extends: .terraform-base
+  stage: infra-apply
+  script:
+    - terraform apply -auto-approve tfplan
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+
+tf-test-live:
+  extends: .terraform-base
+  stage: infra-verify
+  script:
+    - terraform test
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

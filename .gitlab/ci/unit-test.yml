@@ -1,12 +1,11 @@
-build-push-ecr:
-  stage: build
-  image: docker:latest
-  services:
-    - docker:dind
+pytest-unit:
+  stage: unit-test
+  image: python:3.12-slim
   before_script:
-    - apk add --no-cache make aws-cli bash
+    - pip install -r requirements.txt
+    - pip install pytest
   script:
-    - ./make.sh docker_push
+    - pytest tests/
   rules:
     - if: $CI_COMMIT_BRANCH =~ /^feature\/.*$/
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && ($CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev")
