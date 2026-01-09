@@ -46,7 +46,9 @@ def validate_organization_data(data):
     missing_fields = [field for field in required_fields if not data.get(field)]
 
     if missing_fields:
-        return False, f"Missing required fields: {', '.join(missing_fields)}"
+        error_message = f"Missing required fields: {', '.join(missing_fields)}"
+        print(f"Validation error: {error_message}")
+        return False, error_message
 
     return True, None
 

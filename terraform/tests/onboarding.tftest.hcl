@@ -8,8 +8,15 @@ run "test_onboarding_function" {
   variables {
     function_name = "cmmxna-pr-onboarding"
     payload       = jsonencode({
-      target_name = "Unit-Test-Corp"
-      phase       = "Discovery"
+      httpMethod = "POST"
+      path       = "/onboarding"
+      body       = jsonencode({
+        company_name    = "MNA-Terraform-Test-Corp"
+        industry        = "Terraform Testing"
+        contact_name    = "Terraform CISO"
+        contact_email   = "tf-ciso@example.com"
+        scoring_enabled = true
+      })
     })
   }
 

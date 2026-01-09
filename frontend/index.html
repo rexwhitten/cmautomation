@@ -368,25 +368,26 @@
           return;
         }
 
-        // Build the payload matching the new data model
+        // Build the payload matching the backend expectations
         const payload = {
-          company_info: {
-            name: document.getElementById("companyName").value,
-            industry: document.getElementById("industry").value || "",
-          },
-          contacts: {
-            ciso: document.getElementById("cisoEmail").value,
-          },
-          features: {
-            scoring_enabled: document.getElementById("scoringEnabled").checked,
-          },
+          company_name: document.getElementById("companyName").value,
+          industry: document.getElementById("industry").value || "",
+          contact_name: document.getElementById("cisoName").value,
+          contact_email: document.getElementById("cisoEmail").value,
+          scoring_enabled: document.getElementById("scoringEnabled").checked,
         };
 
         // Add remediation contact if provided
+        const remediationName =
+          document.getElementById("remediationName").value;
         const remediationEmail =
           document.getElementById("remediationEmail").value;
-        if (remediationEmail.trim()) {
-          payload.contacts.remediation = remediationEmail;
+
+        if (remediationName.trim() || remediationEmail.trim()) {
+          payload.remediation_contact = {
+            name: remediationName,
+            email: remediationEmail,
+          };
         }
 
         try {
@@ -405,8 +406,12 @@
           });
 
           const result = await response.json();
+          console.log("Submission result:", response.status, result);
 
-          if (response.ok && result.org_uuid) {
+          if (
+            (response.status === 200 || response.status === 201) &&
+            result.org_uuid
+          ) {
             // Show success state
             document.getElementById("onboardingForm").style.display = "none";
             document.getElementById("orgUuid").textContent = result.org_uuid;
