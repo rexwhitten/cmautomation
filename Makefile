@@ -54,10 +54,6 @@ docker-push: docker-build
 		docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION public.ecr.aws/aws-cli/aws-cli:latest ssm put-parameter --name "/app/$$REPO_NAME/image_uri" --value "$(IMAGE_NAME)" --type String --overwrite --region $(ECR_REGION); \
 	fi
 	
-
-
-
-
 # Clean up Python cache files
 clean:
 	rm -rf __pycache__ .pytest_cache

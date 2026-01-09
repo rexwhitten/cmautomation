@@ -1,0 +1,15 @@
+deploy-infra:
+  stage: deploy
+  image: hashicorp/terraform:latest
+  before_script:
+    - cd ${TF_ROOT}
+    - terraform --version
+    - terraform init
+  script:
+    - terraform validate
+    - terraform plan -out=tfplan -var="image_tag=$IMAGE_TAG"
+    - terraform apply -auto-approve tfplan
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  dependencies:
+    - build-lambda
