@@ -10,3 +10,4 @@ build-lambda:
     - make docker-push IMAGE_TAG=$IMAGE_TAG
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feature\/.*$/
