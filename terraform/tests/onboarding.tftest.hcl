@@ -17,6 +17,6 @@ run "test_onboarding_function" {
   assert {
     # Accept success (200/201) or not implemented (501)
     condition     = output.is_not_implemented || output.status_code == 200 || output.status_code == 201
-    error_message = "Onboarding failed unexpectedly. Status: ${output.status_code}. Not Implemented: ${output.is_not_implemented}."
+    error_message = "Onboarding failed unexpectedly. Status: ${output.status_code}. Messages ${output.error_messages}."
   }
 }

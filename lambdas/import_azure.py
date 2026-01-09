@@ -24,15 +24,36 @@ def import_azure_logic(event, context):
 
     if not FRONTEND_BUCKET:
         logger.error("CCM_MNA_FRONTEND_BUCKET environment variable not set")
-        return {"statusCode": 500, "body": "Configuration error"}
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+            },
+            "body": json.dumps(
+                {
+                    "error": "Configuration error",
+                    "details": "CCM_MNA_FRONTEND_BUCKET environment variable not set",
+                }
+            ),
+        }
 
     # Parse the body if it's a string
     body = event.get("body", {})
     if isinstance(body, str):
         try:
             body = json.loads(body)
-        except json.JSONDecodeError:
-            return {"statusCode": 400, "body": "Invalid JSON in request body"}
+        except json.JSONDecodeError as e:
+            return {
+                "statusCode": 400,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*",
+                },
+                "body": json.dumps(
+                    {"error": "Invalid JSON in request body", "details": str(e)}
+                ),
+            }
 
     # Generate a unique run ID based on timestamp
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -53,6 +74,10 @@ def import_azure_logic(event, context):
 
         return {
             "statusCode": 201,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+            },
             "body": json.dumps(
                 {
                     "message": "Data imported successfully",
@@ -62,5 +87,18 @@ def import_azure_logic(event, context):
             ),
         }
     except Exception as e:
-        logger.error(f"Error storing data in S3: {str(e)}")
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+        logger.error(f"Error storing data in S3: {str(e)}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+            },
+            "body": json.dumps(
+                {
+                    "error": "Failed to import Azure data",
+                    "details": str(e),
+                    "type": type(e).__name__,
+                }
+            ),
+        }

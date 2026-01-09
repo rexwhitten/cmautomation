@@ -38,6 +38,8 @@ resource "aws_iam_policy" "lambda_custom_policy" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
           "s3:ListBucket"
         ]
         Resource = [
@@ -65,8 +67,9 @@ resource "aws_iam_policy" "lambda_custom_policy" {
           "dynamodb:Scan"
         ]
         Resource = [  
-          aws_dynamodb_table.context.arn,
-          aws_dynamodb_table.assessments.arn
+          aws_dynamodb_table.mna_context.arn,
+          aws_dynamodb_table.mna_scoring.arn,
+          aws_dynamodb_table.mna_paas_item.arn
         ]
       }
     ]

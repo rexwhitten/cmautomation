@@ -1,5 +1,4 @@
 locals {
-
   functions = {
     onboarding           = "handlers.onboarding_handler"
     import_aws           = "handlers.import_aws_handler"
@@ -45,13 +44,20 @@ resource "aws_lambda_function" "functions" {
 
   environment {
     variables = {
-      CCM_MNA_FRONTEND_BUCKET   = aws_s3_bucket.frontend_bucket.id
-      CCM_MNA_CONTEXT_TABLE     = aws_dynamodb_table.context.name
-      CCM_MNA_ASSESSMENT_TABLE  = aws_dynamodb_table.assessments.name
+      CCM_MNA_FRONTEND_BUCKET             = aws_s3_bucket.frontend_bucket.id
+      CCM_MNA_FRONTEND_BUCKET_KEY_PREFIX  = "frontend/"
+      CCM_MNA_IMPORT_BUCKET               = aws_s3_bucket.frontend_bucket.id
+      CCM_MNA_IMPORT_BUCKET_KEY_PREFIX    = "imports/"
+      CCM_MNA_CONTEXT_TABLE               = aws_dynamodb_table.mna_context.name
+      CCM_MNA_SCORING_TABLE               = aws_dynamodb_table.mna_scoring.name
+      CCM_MNA_PAAS_ITEM_TABLE             = aws_dynamodb_table.mna_paas_item.name
     }
   }
 
   # 15 minute timeout
   timeout = 900
   tags = local.tags
+
+  # Ensure CloudWatch log group is created first
+  depends_on = [aws_cloudwatch_log_group.lambda_logs]
 }

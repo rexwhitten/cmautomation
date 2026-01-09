@@ -1,15 +1,20 @@
 import json
 import boto3
 import uuid
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 from boto3.dynamodb.conditions import Key
 import os
 
+# Configure structured logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 # Initialize DynamoDB client
 dynamodb = boto3.resource("dynamodb")
-table_name = os.environ.get("DYNAMODB_TABLE", "mna-onboarding")
-table = dynamodb.Table(table_name)
+context_table_name = os.environ.get("CCM_MNA_CONTEXT_TABLE", "mna_context")
+context_table = dynamodb.Table(context_table_name)
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -35,16 +40,9 @@ def response(status_code, body):
     }
 
 
-def validate_step_data(step, data):
-    """Validate required fields for each step"""
-    validations = {
-        1: ["companyName", "contactName", "contactEmail"],
-        2: ["transactionType", "targetCompany", "dealStage"],
-        3: ["cloudProviders"],
-        4: ["focusAreas"],
-    }
-
-    required_fields = validations.get(step, [])
+def validate_organization_data(data):
+    """Validate required fields for organization onboarding"""
+    required_fields = ["company_name"]
     missing_fields = [field for field in required_fields if not data.get(field)]
 
     if missing_fields:
@@ -53,281 +51,238 @@ def validate_step_data(step, data):
     return True, None
 
 
-def create_onboarding(event_body):
-    """Create a new onboarding record"""
+def create_organization(event_body):
+    """Create a new organization record in mna_context table"""
     try:
-        onboarding_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat()
+        logger.info(
+            "Creating new organization",
+            extra={"event_body_keys": list(event_body.keys())},
+        )
 
+        # Validate input
+        is_valid, error_msg = validate_organization_data(event_body)
+        if not is_valid:
+            logger.warning("Organization validation failed", extra={"error": error_msg})
+            return response(400, {"error": error_msg})
+
+        org_uuid = str(uuid.uuid4())
+        logger.info("Generated organization UUID", extra={"org_uuid": org_uuid})
+
+        # Build the organization item according to data model
         item = {
-            "onboardingId": onboarding_id,
-            "userId": event_body.get("userId", ""),
-            "createdAt": timestamp,
-            "updatedAt": timestamp,
-            "currentStep": 1,
-            "status": "draft",
-            "companyName": event_body.get("companyName", ""),
-            "contactName": event_body.get("contactName", ""),
-            "contactEmail": event_body.get("contactEmail", ""),
-            "contactPhone": event_body.get("contactPhone", ""),
-            "formData": {},
+            "PK": f"ORG#{org_uuid}",
+            "company_info": {
+                "name": event_body.get("company_name", ""),
+                "industry": event_body.get("industry", ""),
+                "target_company": event_body.get("target_company", ""),
+            },
+            "contacts": {
+                "ciso": {
+                    "name": event_body.get("contact_name", ""),
+                    "email": event_body.get("contact_email", ""),
+                    "phone": event_body.get("contact_phone", ""),
+                },
+                "remediation": event_body.get("remediation_contact", {}),
+            },
+            "features": {
+                "scoring_enabled": event_body.get("scoring_enabled", True),
+            },
+            "metadata": {
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "status": "active",
+            },
         }
 
-        table.put_item(Item=item)
+        context_table.put_item(Item=item)
+        logger.info(
+            "Organization created successfully",
+            extra={"org_uuid": org_uuid, "company_name": item["company_info"]["name"]},
+        )
 
         return response(
             201,
             {
-                "message": "Onboarding created successfully",
-                "onboardingId": onboarding_id,
+                "message": "Organization created successfully",
+                "org_uuid": org_uuid,
                 "data": item,
             },
         )
 
     except Exception as e:
-        print(f"Error creating onboarding: {str(e)}")
+        logger.error(
+            "Failed to create organization",
+            exc_info=True,
+            extra={"error_type": type(e).__name__, "error_message": str(e)},
+        )
         return response(
-            500, {"error": "Failed to create onboarding", "details": str(e)}
+            500, {"error": "Failed to create organization", "details": str(e)}
         )
 
 
-def get_onboarding(onboarding_id):
-    """Retrieve an onboarding record"""
+def get_organization(org_uuid):
+    """Retrieve an organization record"""
     try:
-        result = table.get_item(Key={"onboardingId": onboarding_id})
+        result = context_table.get_item(Key={"PK": f"ORG#{org_uuid}"})
 
         if "Item" not in result:
-            return response(404, {"error": "Onboarding not found"})
+            return response(404, {"error": "Organization not found"})
 
         return response(
             200,
-            {"message": "Onboarding retrieved successfully", "data": result["Item"]},
+            {"message": "Organization retrieved successfully", "data": result["Item"]},
         )
 
     except Exception as e:
-        print(f"Error retrieving onboarding: {str(e)}")
+        print(f"Error retrieving organization: {str(e)}")
         return response(
-            500, {"error": "Failed to retrieve onboarding", "details": str(e)}
+            500, {"error": "Failed to retrieve organization", "details": str(e)}
         )
 
 
-def update_onboarding_step(onboarding_id, event_body):
-    """Update onboarding with step data"""
+def update_organization(org_uuid, event_body):
+    """Update organization information"""
     try:
-        step = event_body.get("step")
-        step_data = event_body.get("data", {})
-
-        if not step:
-            return response(400, {"error": "Step number is required"})
-
-        # Validate step data
-        is_valid, error_msg = validate_step_data(step, step_data)
-        if not is_valid:
-            return response(400, {"error": error_msg})
-
         # Get current record
-        result = table.get_item(Key={"onboardingId": onboarding_id})
+        result = context_table.get_item(Key={"PK": f"ORG#{org_uuid}"})
         if "Item" not in result:
-            return response(404, {"error": "Onboarding not found"})
+            return response(404, {"error": "Organization not found"})
 
-        current_item = result["Item"]
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
 
-        # Update based on step
-        update_expression_parts = ["updatedAt = :timestamp", "currentStep = :step"]
-        expression_values = {":timestamp": timestamp, ":step": step}
+        # Build update expression
+        update_parts = ["metadata.updated_at = :timestamp"]
+        expression_values = {":timestamp": timestamp}
 
-        # Store step-specific data
-        if step == 1:
-            update_expression_parts.extend(
-                [
-                    "companyName = :companyName",
-                    "contactName = :contactName",
-                    "contactEmail = :contactEmail",
-                    "contactPhone = :contactPhone",
-                ]
-            )
-            expression_values.update(
-                {
-                    ":companyName": step_data.get("companyName", ""),
-                    ":contactName": step_data.get("contactName", ""),
-                    ":contactEmail": step_data.get("contactEmail", ""),
-                    ":contactPhone": step_data.get("contactPhone", ""),
-                }
-            )
+        # Update company info if provided
+        if (
+            "company_name" in event_body
+            or "industry" in event_body
+            or "target_company" in event_body
+        ):
+            if "company_name" in event_body:
+                update_parts.append("company_info.#name = :company_name")
+                expression_values[":company_name"] = event_body["company_name"]
+            if "industry" in event_body:
+                update_parts.append("company_info.industry = :industry")
+                expression_values[":industry"] = event_body["industry"]
+            if "target_company" in event_body:
+                update_parts.append("company_info.target_company = :target_company")
+                expression_values[":target_company"] = event_body["target_company"]
 
-        elif step == 2:
-            update_expression_parts.extend(
-                [
-                    "transactionType = :transactionType",
-                    "targetCompany = :targetCompany",
-                    "dealStage = :dealStage",
-                    "expectedCloseDate = :expectedCloseDate",
-                ]
-            )
-            expression_values.update(
-                {
-                    ":transactionType": step_data.get("transactionType", ""),
-                    ":targetCompany": step_data.get("targetCompany", ""),
-                    ":dealStage": step_data.get("dealStage", ""),
-                    ":expectedCloseDate": step_data.get("expectedCloseDate", ""),
-                }
-            )
+        # Update contacts if provided
+        if (
+            "contact_name" in event_body
+            or "contact_email" in event_body
+            or "contact_phone" in event_body
+        ):
+            if "contact_name" in event_body:
+                update_parts.append("contacts.ciso.#name = :contact_name")
+                expression_values[":contact_name"] = event_body["contact_name"]
+            if "contact_email" in event_body:
+                update_parts.append("contacts.ciso.email = :contact_email")
+                expression_values[":contact_email"] = event_body["contact_email"]
+            if "contact_phone" in event_body:
+                update_parts.append("contacts.ciso.phone = :contact_phone")
+                expression_values[":contact_phone"] = event_body["contact_phone"]
 
-        elif step == 3:
-            update_expression_parts.extend(
-                [
-                    "cloudProviders = :cloudProviders",
-                    "accountCount = :accountCount",
-                    "workloadTypes = :workloadTypes",
-                ]
-            )
-            expression_values.update(
-                {
-                    ":cloudProviders": step_data.get("cloudProviders", []),
-                    ":accountCount": step_data.get("accountCount", ""),
-                    ":workloadTypes": step_data.get("workloadTypes", ""),
-                }
-            )
+        # Update features if provided
+        if "scoring_enabled" in event_body:
+            update_parts.append("features.scoring_enabled = :scoring_enabled")
+            expression_values[":scoring_enabled"] = event_body["scoring_enabled"]
 
-        elif step == 4:
-            update_expression_parts.extend(
-                [
-                    "focusAreas = :focusAreas",
-                    "complianceFrameworks = :complianceFrameworks",
-                    "additionalNotes = :additionalNotes",
-                ]
-            )
-            expression_values.update(
-                {
-                    ":focusAreas": step_data.get("focusAreas", []),
-                    ":complianceFrameworks": step_data.get("complianceFrameworks", []),
-                    ":additionalNotes": step_data.get("additionalNotes", ""),
-                }
-            )
-
-        # Execute update
-        update_expression = "SET " + ", ".join(update_expression_parts)
-
-        updated_item = table.update_item(
-            Key={"onboardingId": onboarding_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_values,
-            ReturnValues="ALL_NEW",
+        update_expression = "SET " + ", ".join(update_parts)
+        expression_names = (
+            {"#name": "name"}
+            if "company_name" in event_body or "contact_name" in event_body
+            else None
         )
+
+        update_kwargs = {
+            "Key": {"PK": f"ORG#{org_uuid}"},
+            "UpdateExpression": update_expression,
+            "ExpressionAttributeValues": expression_values,
+            "ReturnValues": "ALL_NEW",
+        }
+
+        if expression_names:
+            update_kwargs["ExpressionAttributeNames"] = expression_names
+
+        updated_item = context_table.update_item(**update_kwargs)
+
+        updated_item = context_table.update_item(**update_kwargs)
 
         return response(
             200,
             {
-                "message": f"Step {step} updated successfully",
+                "message": "Organization updated successfully",
                 "data": updated_item["Attributes"],
             },
         )
 
     except Exception as e:
-        print(f"Error updating onboarding step: {str(e)}")
+        print(f"Error updating organization: {str(e)}")
         return response(
-            500, {"error": "Failed to update onboarding", "details": str(e)}
+            500, {"error": "Failed to update organization", "details": str(e)}
         )
 
 
-def submit_onboarding(onboarding_id, event_body):
-    """Finalize and submit the onboarding"""
-    try:
-        # Get current record
-        result = table.get_item(Key={"onboardingId": onboarding_id})
-        if "Item" not in result:
-            return response(404, {"error": "Onboarding not found"})
-
-        timestamp = datetime.utcnow().isoformat()
-
-        # Update status to completed
-        updated_item = table.update_item(
-            Key={"onboardingId": onboarding_id},
-            UpdateExpression="SET #status = :status, updatedAt = :timestamp, submittedAt = :timestamp",
-            ExpressionAttributeNames={"#status": "status"},
-            ExpressionAttributeValues={":status": "submitted", ":timestamp": timestamp},
-            ReturnValues="ALL_NEW",
-        )
-
-        # Here you could add additional logic like:
-        # - Send notification emails
-        # - Trigger assessment workflows
-        # - Create tickets in project management systems
-
-        return response(
-            200,
-            {
-                "message": "Onboarding submitted successfully",
-                "data": updated_item["Attributes"],
-            },
-        )
-
-    except Exception as e:
-        print(f"Error submitting onboarding: {str(e)}")
-        return response(
-            500, {"error": "Failed to submit onboarding", "details": str(e)}
-        )
-
-
-def list_onboarding_records(query_params):
-    """List onboarding records with optional filtering"""
+def list_organizations(query_params):
+    """List organization records"""
     try:
         # Get pagination parameters
         limit = int(query_params.get("limit", 50))
         last_key = query_params.get("lastKey")
-        status_filter = query_params.get("status")
 
         scan_kwargs = {"Limit": limit}
 
         if last_key:
-            scan_kwargs["ExclusiveStartKey"] = {"onboardingId": last_key}
+            scan_kwargs["ExclusiveStartKey"] = {"PK": last_key}
 
-        if status_filter:
-            scan_kwargs["FilterExpression"] = Key("status").eq(status_filter)
+        result = context_table.scan(**scan_kwargs)
 
-        result = table.scan(**scan_kwargs)
+        result = context_table.scan(**scan_kwargs)
 
         response_data = {
-            "message": "Onboarding records retrieved successfully",
+            "message": "Organizations retrieved successfully",
             "data": result.get("Items", []),
             "count": len(result.get("Items", [])),
         }
 
         if "LastEvaluatedKey" in result:
-            response_data["lastKey"] = result["LastEvaluatedKey"]["onboardingId"]
+            response_data["lastKey"] = result["LastEvaluatedKey"]["PK"]
 
         return response(200, response_data)
 
     except Exception as e:
-        print(f"Error listing onboarding records: {str(e)}")
+        print(f"Error listing organizations: {str(e)}")
         return response(
-            500, {"error": "Failed to list onboarding records", "details": str(e)}
+            500, {"error": "Failed to list organizations", "details": str(e)}
         )
 
 
-def delete_onboarding(onboarding_id):
-    """Delete an onboarding record"""
+def delete_organization(org_uuid):
+    """Delete an organization record"""
     try:
         # Check if record exists
-        result = table.get_item(Key={"onboardingId": onboarding_id})
+        result = context_table.get_item(Key={"PK": f"ORG#{org_uuid}"})
         if "Item" not in result:
-            return response(404, {"error": "Onboarding not found"})
+            return response(404, {"error": "Organization not found"})
 
-        table.delete_item(Key={"onboardingId": onboarding_id})
+        context_table.delete_item(Key={"PK": f"ORG#{org_uuid}"})
 
         return response(
             200,
             {
-                "message": "Onboarding deleted successfully",
-                "onboardingId": onboarding_id,
+                "message": "Organization deleted successfully",
+                "org_uuid": org_uuid,
             },
         )
 
     except Exception as e:
-        print(f"Error deleting onboarding: {str(e)}")
+        print(f"Error deleting organization: {str(e)}")
         return response(
-            500, {"error": "Failed to delete onboarding", "details": str(e)}
+            500, {"error": "Failed to delete organization", "details": str(e)}
         )
 
 
@@ -336,8 +291,15 @@ def onboarding_logic(event, context):
     try:
         print(f"Received event: {json.dumps(event)}")
 
-        http_method = event.get("httpMethod", "")
-        path = event.get("path", "")
+        http_method = event.get("httpMethod")
+        if not http_method:
+            # Try to get HTTP method from requestContext (API Gateway HTTP API v2)
+            http_method = (
+                event.get("requestContext", {}).get("http", {}).get("method", "")
+            )
+
+        # Handle both API Gateway V1 (path) and V2 (rawPath)
+        path = event.get("rawPath") or event.get("path") or "/"
         query_params = event.get("queryStringParameters") or {}
 
         # Parse body if present
@@ -345,32 +307,30 @@ def onboarding_logic(event, context):
         if event.get("body"):
             body = json.loads(event.get("body"))
 
-        # Extract onboarding ID from path if present
+        # Extract org_uuid from path if present
         path_parts = path.strip("/").split("/")
-        onboarding_id = path_parts[1] if len(path_parts) > 1 else None
+        org_uuid = path_parts[1] if len(path_parts) > 1 else None
 
         # Handle OPTIONS for CORS
         if http_method == "OPTIONS":
             return response(200, {"message": "OK"})
 
-        # Route requests
-        if http_method == "POST" and path == "/onboarding":
-            return create_onboarding(body)
+        # Route requests based on new data model
+        # Allow POST to root path "/" (when accessed via Function URL) or "/onboarding" (when local/API Gateway)
+        if http_method == "POST" and (path == "/onboarding" or path == "/"):
+            return create_organization(body)
 
-        elif http_method == "GET" and path == "/onboarding":
-            return list_onboarding_records(query_params)
+        elif http_method == "GET" and (path == "/onboarding" or path == "/"):
+            return list_organizations(query_params)
 
-        elif http_method == "GET" and onboarding_id:
-            return get_onboarding(onboarding_id)
+        elif http_method == "GET" and org_uuid:
+            return get_organization(org_uuid)
 
-        elif http_method == "PUT" and onboarding_id and "step" in body:
-            return update_onboarding_step(onboarding_id, body)
+        elif http_method == "PUT" and org_uuid:
+            return update_organization(org_uuid, body)
 
-        elif http_method == "POST" and onboarding_id and path.endswith("/submit"):
-            return submit_onboarding(onboarding_id, body)
-
-        elif http_method == "DELETE" and onboarding_id:
-            return delete_onboarding(onboarding_id)
+        elif http_method == "DELETE" and org_uuid:
+            return delete_organization(org_uuid)
 
         else:
             return response(404, {"error": "Route not found"})

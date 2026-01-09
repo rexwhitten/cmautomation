@@ -1,81 +1,149 @@
-# Seed Data 
-
 # =============================================================================
-# SEED DATA 1: The Context (The M&A Entity)
+# LEVEL 1: The "Wild West" Acquisition
+# Context: Just acquired. No standards. Goal is simply to get visibility.
 # =============================================================================
-resource "aws_dynamodb_table_item" "synthetic_context" {
-  table_name = aws_dynamodb_table.context.name
-  hash_key   = aws_dynamodb_table.context.hash_key
-  range_key  = aws_dynamodb_table.context.range_key
+resource "aws_dynamodb_table_item" "context_l1_loans" {
+  table_name = aws_dynamodb_table.mna_context.name
+  hash_key   = aws_dynamodb_table.mna_context.hash_key
 
   item = jsonencode({
-    "PK": {"S": "ENTITY#SYNTHETIC_TEST_001"},
-    "SK": {"S": "META#INFO"},
+    "PK": {"S": "ORG#LEVEL1-0000-0001-0000-000000000001"},
     
-    # GSI for Resource Lookup: Linking AWS Account 999999999999 to this Entity
-    "GSI1PK": {"S": "RESOURCE#aws:999999999999"},
-    "GSI1SK": {"S": "LINK"},
+    "company_info": {"M": {
+      "name":        {"S": "QuickCash Loans (Legacy)"},
+      "industry":    {"S": "Consumer Lending"},
+      "description": {"S": "Recent acquisition. High risk. No logging standards."}
+    }},
+    
+    "contacts": {"M": {
+      "ciso":        {"S": "interim-ciso@fiserv.com"},
+      "remediation": {"S": "mna-team-alpha@fiserv.com"}
+    }},
 
-    # Metadata Attributes
-    "company_name":    {"S": "Acme Corp (Synthetic Test)"},
-    "contact_email":   {"S": "admin@acme-test.com"},
-    "is_scoring":      {"BOOL": true},
-    "is_complete":     {"BOOL": false},
-    "aws_account_ids": {"L": [{"S": "999999999999"}]},
-    "azure_sub_ids":   {"L": []}
+    "features": {"M": {
+      "scoring_enabled":        {"BOOL": true},
+      "target_maturity_level":  {"N": "1"},  # Target: Just get Wiz installed
+      "drift_alerting_enabled": {"BOOL": false} # Don't alert on noise yet
+    }}
   })
 }
 
 # =============================================================================
-# SEED DATA 2: The Assessment (The Scored Resource)
+# LEVEL 2: The "Local Compliance" Shop
+# Context: Basic hygiene. Logging exists but is local. Scripts are manual.
 # =============================================================================
-resource "aws_dynamodb_table_item" "synthetic_assessment" {
-  table_name = aws_dynamodb_table.assessments.name
-  hash_key   = aws_dynamodb_table.assessments.hash_key
-  range_key  = aws_dynamodb_table.assessments.range_key
+resource "aws_dynamodb_table_item" "context_l2_ledger" {
+  table_name = aws_dynamodb_table.mna_context.name
+  hash_key   = aws_dynamodb_table.mna_context.hash_key
 
   item = jsonencode({
-    "PK": {"S": "RESOURCE#aws:999999999999"},
-    "SK": {"S": "STATE#LATEST"},
+    "PK": {"S": "ORG#LEVEL2-0000-0002-0000-000000000002"},
 
-    # Link back to the Parent Entity
-    "GSI1PK": {"S": "ENTITY#SYNTHETIC_TEST_001"},
-    
-    "scan_time":     {"S": "2023-10-27T10:00:00Z"},
-    "resource_type": {"S": "AWS"},
-
-    # --- ABSTRACT BLOCK 1: The Score ---
-    "score": {"M": {
-      "current": {"N": "3"},
-      "target":  {"N": "6"},
-      "label":   {"S": "COMPLIANT_L3"},
-      "version": {"S": "1.0"}
+    "company_info": {"M": {
+      "name":        {"S": "Ledger Block Inc"},
+      "industry":    {"S": "Crypto / Blockchain"},
+      "description": {"S": "Remediation phase. Local logging enabled. Manual hardening."}
     }},
 
-    # --- ABSTRACT BLOCK 2: The Facts (Matches your Python Enums) ---
-    "facts": {"M": {
-      "environment":          {"S": "production"},
-      "impl_owner":           {"S": "fiserv_corporate"},
-      "strategic_go_forward": {"BOOL": true},
-      
-      "logging_status":       {"S": "centralized"},
-      "os_hardening":         {"S": "hardening_scripts"},
-      
-      # Lists in DynamoDB JSON are verbose: {"L": [{"S": "val"}]}
-      "agents":               {"L": [{"S": "crowdstrike"}]},
-      "posture_tools":        {"L": [{"S": "wiz"}]},
-      
-      "network_connectivity": {"S": "non_transit"},
-      "policy_enforcement":   {"S": "fiserv_enterprise"},
-      "service_restriction":  {"S": "disabled"}
+    "contacts": {"M": {
+      "ciso":        {"S": "security@ledgerblock.io"},
+      "remediation": {"S": "devops@ledgerblock.io"}
     }},
 
-    # --- ABSTRACT BLOCK 3: The Gaps ---
-    "gaps": {"L": [
-      {"M": {
-        "rule":        {"S": "NET-01"},
-        "description": {"S": "Transit Connectivity Required for Level 4"}
-      }}
-    ]}
+    "features": {"M": {
+      "scoring_enabled":        {"BOOL": true},
+      "target_maturity_level":  {"N": "2"},  # Target: Local Logging & Scripts
+      "drift_alerting_enabled": {"BOOL": true}
+    }}
+  })
+}
+
+# =============================================================================
+# LEVEL 3: The "Enterprise Alignment" Firm
+# Context: Day 0 Integration. Policies are switching to Enterprise management.
+# =============================================================================
+resource "aws_dynamodb_table_item" "context_l3_wealth" {
+  table_name = aws_dynamodb_table.mna_context.name
+  hash_key   = aws_dynamodb_table.mna_context.hash_key
+
+  item = jsonencode({
+    "PK": {"S": "ORG#LEVEL3-0000-0003-0000-000000000003"},
+
+    "company_info": {"M": {
+      "name":        {"S": "WealthSafe Advisors"},
+      "industry":    {"S": "Wealth Management"},
+      "description": {"S": "Pre-Merger Close. Enterprise Policy & FinOps integration."}
+    }},
+
+    "contacts": {"M": {
+      "ciso":        {"S": "risk-officer@wealthsafe.com"},
+      "remediation": {"S": "cloud-arch@fiserv-corp.com"}
+    }},
+
+    "features": {"M": {
+      "scoring_enabled":        {"BOOL": true},
+      "target_maturity_level":  {"N": "3"},  # Target: Enterprise Policy
+      "drift_alerting_enabled": {"BOOL": true}
+    }}
+  })
+}
+
+# =============================================================================
+# LEVEL 4: The "Network Integrated" Processor
+# Context: Post-Merger (Day 1). Transit Gateway connected. High traffic flow.
+# =============================================================================
+resource "aws_dynamodb_table_item" "context_l4_payments" {
+  table_name = aws_dynamodb_table.mna_context.name
+  hash_key   = aws_dynamodb_table.mna_context.hash_key
+
+  item = jsonencode({
+    "PK": {"S": "ORG#LEVEL4-0000-0004-0000-000000000004"},
+
+    "company_info": {"M": {
+      "name":        {"S": "Global Pay Rails"},
+      "industry":    {"S": "Payment Processing"},
+      "description": {"S": "Connected to Transit Gateway. Production Traffic Live."}
+    }},
+
+    "contacts": {"M": {
+      "ciso":        {"S": "ciso@globalpay.com"},
+      "remediation": {"S": "noc@fiserv-commercial.com"}
+    }},
+
+    "features": {"M": {
+      "scoring_enabled":        {"BOOL": true},
+      "target_maturity_level":  {"N": "4"},  # Target: Network Integration
+      "drift_alerting_enabled": {"BOOL": true}
+    }}
+  })
+}
+
+# =============================================================================
+# LEVEL 5: The "Fortress" (End State)
+# Context: Service Restrictions Active. Immutable Infrastructure.
+# =============================================================================
+resource "aws_dynamodb_table_item" "context_l5_surety" {
+  table_name = aws_dynamodb_table.mna_context.name
+  hash_key   = aws_dynamodb_table.mna_context.hash_key
+
+  item = jsonencode({
+    "PK": {"S": "ORG#LEVEL5-0000-0005-0000-000000000005"},
+
+    "company_info": {"M": {
+      "name":        {"S": "Surety Insurance Group"},
+      "industry":    {"S": "InsurTech"},
+      "description": {"S": "End State. Service Control Policies blocking unauthorized services."}
+    }},
+
+    "contacts": {"M": {
+      "ciso":        {"S": "security@surety.com"},
+      "remediation": {"S": "sre-team@surety.com"}
+    }},
+
+    "features": {"M": {
+      "scoring_enabled":        {"BOOL": true},
+      "target_maturity_level":  {"N": "5"},  # Target: Service Restriction / Parity
+      "drift_alerting_enabled": {"BOOL": true}
+    }}
   })
 }

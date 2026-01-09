@@ -14,7 +14,7 @@ logger.setLevel(logging.INFO)
 dynamodb: "DynamoDBServiceResource" = boto3.resource("dynamodb")  # type: ignore
 s3: "S3Client" = boto3.client("s3")  # type: ignore
 
-ASSESSMENTS_TABLE = os.environ.get("CCM_MNA_ASSESSMENT_TABLE")
+SCORING_TABLE = os.environ.get("CCM_MNA_SCORING_TABLE")
 
 
 def scoring_logic(event, context):
@@ -22,15 +22,15 @@ def scoring_logic(event, context):
     Scoring Lambda Logic
 
     Reads findings data from S3 (expected via event or predetermined path)
-    and creates records in the Assessments DynamoDB table.
+    and creates records in the Scoring DynamoDB table.
     """
     logger.info(f"Received event: {json.dumps(event)}")
 
-    if not ASSESSMENTS_TABLE:
-        logger.error("CCM_MNA_ASSESSMENT_TABLE environment variable not set")
+    if not SCORING_TABLE:
+        logger.error("CCM_MNA_SCORING_TABLE environment variable not set")
         return {"statusCode": 500, "body": "Configuration error"}
 
-    table = dynamodb.Table(ASSESSMENTS_TABLE)
+    table = dynamodb.Table(SCORING_TABLE)
 
     # Example: Process S3 event records
     # This assumes the event is an S3 notification event.
@@ -51,10 +51,10 @@ def scoring_logic(event, context):
                 content = response["Body"].read().decode("utf-8")
                 findings = json.loads(content)
 
-                # Assume findings is a list of dicts suitable for assessment conversion
+                # Assume findings is a list of dicts suitable for scoring conversion
                 for finding in findings:
                     # TODO: Implement actual scoring logic here
-                    # Mapping generic finding data to DynamoDB Assessment Item structure
+                    # Mapping generic finding data to DynamoDB Scoring Item structure
 
                     item = {
                         "PK": f"RESOURCE#{finding.get('resource_id', 'unknown')}",

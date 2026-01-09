@@ -64,3 +64,16 @@ variable "GIT_BRANCH" {
   type        = string
   default     = ""
 }
+
+# CloudWatch Logging
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 14
+}
+
+variable "enable_function_urls" {
+  description = "Enable or disable the creation of public Lambda Function URLs"
+  type        = bool
+  default     = true
+}

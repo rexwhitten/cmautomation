@@ -99,6 +99,13 @@ apply:
 			-var="GIT_TOKEN=$(TF_VAR_GIT_TOKEN)"
 
 
+
+
+# Remove Lambda CloudWatch Log Groups
+delete-logs:
+	@./helpers/delete_log_groups.sh $(SDLC_ENV)
+
+
 tf/test:
 	@cd $(WORKSPACE_DIR) && \
 		terraform test \

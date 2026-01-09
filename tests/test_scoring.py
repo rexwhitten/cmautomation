@@ -12,7 +12,7 @@ def clean_imports():
         del sys.modules["lambdas.scoring"]
 
 
-@patch.dict(os.environ, {"CCM_MNA_ASSESSMENT_TABLE": "TestAssessmentsTable"})
+@patch.dict(os.environ, {"CCM_MNA_SCORING_TABLE": "TestScoringTable"})
 @patch("boto3.client")
 @patch("boto3.resource")
 def test_scoring_logic_success(mock_boto_resource, mock_boto_client):
@@ -85,7 +85,7 @@ def test_scoring_logic_missing_config(mock_boto_resource, mock_boto_client):
     assert "Configuration error" in response["body"]
 
 
-@patch.dict(os.environ, {"CCM_MNA_ASSESSMENT_TABLE": "TestAssessmentsTable"})
+@patch.dict(os.environ, {"CCM_MNA_SCORING_TABLE": "TestScoringTable"})
 @patch("boto3.client")
 @patch("boto3.resource")
 def test_scoring_logic_s3_error(mock_boto_resource, mock_boto_client):

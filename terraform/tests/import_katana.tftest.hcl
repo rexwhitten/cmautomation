@@ -17,6 +17,6 @@ run "test_import_katana_function" {
   assert {
     # Accept success (200/201) or not implemented (501)
     condition     = output.is_not_implemented || output.status_code == 200 || output.status_code == 201
-    error_message = "Import Katana failed unexpectedly. Status: ${output.status_code}."
+    error_message = "Import Katana failed unexpectedly. Status: ${output.status_code}. Messages ${output.error_messages}."
   }
 }
